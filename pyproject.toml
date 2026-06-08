@@ -76,3 +76,9 @@ indent-style = "space"
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
+
+[tool.ty.environment]
+extra-paths = [
+    "examples/hermes-style-workspace/systems",
+    "examples/openclaw-style-workspace/systems",
+]
