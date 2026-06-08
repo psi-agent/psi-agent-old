@@ -63,6 +63,12 @@ target-version = "py314"
 [tool.ruff.lint]
 select = ["E", "F", "I", "N", "W", "UP", "B", "C4", "SIM"]
 
+[tool.ruff.lint.per-file-ignores]
+# workspace system.py files must patch sys.path before importing sibling modules
+"examples/*/systems/system.py" = ["E402", "I001"]
+# prompt_sections.py contains verbatim OpenClaw source text in string literals
+"examples/openclaw-style-workspace/systems/prompt_sections.py" = ["E501"]
+
 [tool.ruff.format]
 quote-style = "double"
 indent-style = "space"
