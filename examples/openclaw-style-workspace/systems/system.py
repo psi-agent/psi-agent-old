@@ -41,6 +41,9 @@ from collections.abc import Awaitable, Callable
 from datetime import datetime
 from typing import Any
 
+# BackgroundReview is imported lazily inside get_background_review() to avoid
+# import errors when the event loop is not yet running.
+
 import anyio
 from prompt_sections import (
     BOOTSTRAP_PENDING_SECTION,
@@ -77,6 +80,47 @@ from prompt_sections import (
 
 HEARTBEAT_OK = "HEARTBEAT_OK"
 CACHE_BOUNDARY = "\n<!-- OPENCLAW_CACHE_BOUNDARY -->\n"
+
+# ---------------------------------------------------------------------------
+# BackgroundReview singleton — lazy-initialised by get_background_review()
+# ---------------------------------------------------------------------------
+
+_background_review: Any | None = None
+
+
+def get_background_review(
+    complete_fn: Callable[[list[dict[str, Any]], list[dict[str, Any]]], Awaitable[dict[str, Any]]],
+    tool_executors: dict[str, Callable[..., Awaitable[str]]] | None = None,
+    workspace_dir: anyio.Path | str | None = None,
+) -> Any:
+    """Return the module-level BackgroundReview singleton, creating it if needed.
+
+    Lazily imports BackgroundReview so this module can be imported safely before
+    an asyncio event loop is running.  The first call (which happens inside a
+    running loop, triggered by psi-session) creates the instance and spawns the
+    startup curator check.
+
+    Args:
+        complete_fn: Async LLM completion function
+            ``(messages, tools) -> response_dict``.
+        tool_executors: Mapping of tool name to async callable.
+        workspace_dir: Workspace root path passed to BackgroundReview for the
+            startup curator check.
+
+    Returns:
+        The BackgroundReview singleton instance.
+    """
+    global _background_review
+    if _background_review is None:
+        from background_review import BackgroundReview  # noqa: PLC0415
+
+        _background_review = BackgroundReview(
+            complete_fn=complete_fn,
+            tool_executors=tool_executors,
+            workspace_dir=workspace_dir,
+        )
+    return _background_review
+
 
 # ---------------------------------------------------------------------------
 # Paths for user-level files (mirrors OpenClaw's ~/.openclaw/ convention)
@@ -929,6 +973,19 @@ class System:
         # Memory guidance — skip in minimal
         if not is_minimal:
             stable_parts += ["", MEMORY_SECTION]
+
+        # Self-evolution tool guidance — skill_manage and memory (skip in minimal)
+        if not is_minimal:
+            stable_parts += [
+                "",
+                "## Self-Evolution Tools\n"
+                "- `skill_manage` — Create, patch, view, or list workspace skills. "
+                "Use `action=create` to add a new skill, `action=patch` to update an existing one, "
+                "`action=view` to read a skill's SKILL.md, `action=list` to see all skills.\n"
+                "- `memory` — Read, write, append, or clear persistent memory in `memory.md`. "
+                "Use `action=read` to retrieve memory, `action=write` to overwrite, "
+                "`action=append` to add content, `action=clear` to reset.",
+            ]
 
         # Workspace (absolute path, mirrors OpenClaw behaviour)
         workspace_abs = str(await self._workspace_dir.resolve())
