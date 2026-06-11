@@ -1,0 +1,3 @@
+- User: sby
+- Project: psi-agent
+- Preference: concise answers
